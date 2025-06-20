@@ -2,6 +2,8 @@
 
 # Script installs Docker, Docker Compose, Python, and Django
 
+set -e
+
 echo "Starting development tools installation..."
 
 command_exists() {
