@@ -1,6 +1,6 @@
 module "s3_backend" {
   source = "./modules/s3-backend"
-  bucket_name = "terraform-state-bucket-lesson-5-001011"
+  bucket_name = "terraform-state-bucket-lesson-6-001011"
   table_name = "terraform_locks"
 }
 
@@ -15,6 +15,17 @@ module "vpc" {
 
 module "ecr" {
   source      = "./modules/ecr"
-  ecr_name    = "lesson-5-ecr"
+  ecr_name    = "lesson-6-ecr"
   scan_on_push = true
 }
+
+module "eks" {
+  source          = "./modules/eks"
+  cluster_name    = "eks-cluster-demo"            # Назва кластера
+  subnet_ids      = module.vpc.public_subnet       # ID підмереж
+  instance_type   = "t2.micro"                    # Тип інстансів
+  desired_size    = 1                              # Бажана кількість нодів
+  max_size        = 2                              # Максимальна кількість нодів
+  min_size        = 1                              # Мінімальна кількість нодів
+}
+
