@@ -15,7 +15,7 @@ module "vpc" {
 
 module "ecr" {
   source      = "./modules/ecr"
-  ecr_name    = "lesson-6-ecr"
+  ecr_name    = "lesson-7-ecr"
   scan_on_push = true
 }
 
@@ -23,7 +23,7 @@ module "eks" {
   source          = "./modules/eks"
   cluster_name    = "eks-cluster-demo"            # Назва кластера
   subnet_ids      = module.vpc.public_subnet       # ID підмереж
-  instance_type   = "t2.micro"                    # Тип інстансів
+  instance_type   = "t3.medium"                    # Тип інстансів
   desired_size    = 1                              # Бажана кількість нодів
   max_size        = 2                              # Максимальна кількість нодів
   min_size        = 1                              # Мінімальна кількість нодів
