@@ -1,9 +1,9 @@
 terraform {
   backend "s3" {
-    bucket         = "terraform-state-bucket-lesson-5-001011"
-    key            = "lesson-5/terraform.tfstate"
+    bucket         = "mykola-ovchynnik-terraform-state"
+    key            = "goit-devops-mykola-ovchynnik/terraform.tfstate"
     region         = "eu-central-1"
-    dynamodb_table = "terraform_locks"
+    dynamodb_table = "use_lockfile"
     encrypt        = true
   }
 }
