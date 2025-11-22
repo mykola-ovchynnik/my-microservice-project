@@ -1,55 +1,135 @@
-# IAM-роль для EKS-кластера
-resource "aws_iam_role" "eks" {
-  # Ім'я IAM-ролі для кластера EKS
-  name = "${var.cluster_name}-eks-cluster"
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "${var.cluster_name}-cluster-role"
 
-  # Політика, яка дозволяє сервісу EKS «асумувати» цю IAM-роль
-  assume_role_policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "sts:AssumeRole",
-      "Principal": {
-        "Service": "eks.amazonaws.com"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "eks.amazonaws.com"
+        }
       }
-    }
-  ]
-}
-POLICY
+    ]
+  })
+
+  tags = {
+    Name        = "${var.cluster_name}-cluster-role"
+    Environment = "lesson-7"
+  }
 }
 
-# Прив'язка IAM-ролі до політики AmazonEKSClusterPolicy
-resource "aws_iam_role_policy_attachment" "eks" {
-  # ARN політики, що надає дозволи для EKS-кластера
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-
-  # IAM-роль, до якої прив'язується політика
-  role = aws_iam_role.eks.name
+  role       = aws_iam_role.eks_cluster_role.name
 }
 
-# Створення EKS-кластера
-resource "aws_eks_cluster" "eks" {
-  # Назва кластера
-  name = var.cluster_name
+resource "aws_eks_cluster" "main" {
+  name     = var.cluster_name
+  role_arn = aws_iam_role.eks_cluster_role.arn
+  version  = var.cluster_version
 
-  # ARN IAM-ролі, яка потрібна для керування кластером
-  role_arn = aws_iam_role.eks.arn
-
-  # Налаштування мережі (VPC)
   vpc_config {
-    endpoint_private_access = true   # Включає приватний доступ до API-сервера
-    endpoint_public_access  = true   # Включає публічний доступ до API-сервера
-    subnet_ids = var.subnet_ids      # Список підмереж, де буде працювати EKS
+    subnet_ids              = var.subnet_ids
+    endpoint_private_access = true
+    endpoint_public_access  = true
+    public_access_cidrs     = ["0.0.0.0/0"]
   }
 
-  # Налаштування доступу до EKS-кластера
-  access_config {
-    authentication_mode                         = "API"  # Автентифікація через API
-    bootstrap_cluster_creator_admin_permissions = true   # Надає адміністративні права користувачу, який створив кластер
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy
+  ]
+
+  tags = {
+    Name        = var.cluster_name
+    Environment = "lesson-7"
+  }
+}
+
+resource "aws_iam_role" "eks_node_group_role" {
+  name = "${var.cluster_name}-node-group-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.cluster_name}-node-group-role"
+    Environment = "lesson-7"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_node_group_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_node_group_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_node_group_role.name
+}
+
+resource "aws_eks_node_group" "main" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = var.node_group_name
+  node_role_arn   = aws_iam_role.eks_node_group_role.arn
+  subnet_ids      = var.subnet_ids
+
+  capacity_type  = "ON_DEMAND"
+  instance_types = [var.node_group_capacity]
+
+  scaling_config {
+    desired_size = var.node_group_desired_size
+    max_size     = var.node_group_max_size
+    min_size     = var.node_group_min_size
   }
 
-  # Залежність від IAM-політики для ролі EKS
-  depends_on = [aws_iam_role_policy_attachment.eks]
+  update_config {
+    max_unavailable = 1
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_container_registry_policy,
+  ]
+
+  tags = {
+    Name        = var.node_group_name
+    Environment = "lesson-7"
+  }
+}
+
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "vpc-cni"
+}
+
+resource "aws_eks_addon" "coredns" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "coredns"
+
+  depends_on = [aws_eks_node_group.main]
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "kube-proxy"
 }

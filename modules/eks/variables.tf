@@ -1,40 +1,49 @@
-variable "region" {
-  description = "AWS region for deployment"
-  default     = "eu-central-1"
-}
-
 variable "cluster_name" {
   description = "Name of the EKS cluster"
-  default     = "example-eks-cluster"
+  type        = string
+}
+
+variable "cluster_version" {
+  description = "Kubernetes version"
+  type        = string
+  default     = "1.28"
+}
+
+variable "vpc_id" {
+  description = "VPC ID where EKS cluster will be created"
+  type        = string
 }
 
 variable "subnet_ids" {
-  description = "List of subnet IDs for the EKS cluster"
+  description = "List of subnet IDs for EKS cluster"
   type        = list(string)
 }
 
 variable "node_group_name" {
-  description = "Name of the node group"
-  default     = "example-node-group"
+  description = "Name of the EKS node group"
+  type        = string
 }
 
-variable "instance_type" {
-  description = "EC2 instance type for the worker nodes"
+variable "node_group_capacity" {
+  description = "Instance type for EKS node group"
+  type        = string
   default     = "t3.medium"
 }
 
-variable "desired_size" {
-  description = "Desired number of worker nodes"
-  default     = 2
-}
-
-variable "max_size" {
-  description = "Maximum number of worker nodes"
-  default     = 3
-}
-
-variable "min_size" {
-  description = "Minimum number of worker nodes"
+variable "node_group_min_size" {
+  description = "Minimum size of the node group"
+  type        = number
   default     = 1
 }
 
+variable "node_group_max_size" {
+  description = "Maximum size of the node group"
+  type        = number
+  default     = 3
+}
+
+variable "node_group_desired_size" {
+  description = "Desired size of the node group"
+  type        = number
+  default     = 2
+}

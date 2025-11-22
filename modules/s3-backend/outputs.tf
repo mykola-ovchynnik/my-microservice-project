@@ -1,9 +1,19 @@
-output "s3_bucket_name" {
-  description = "Name for S3 bucket to store Terraform state"
-  value = aws_s3_bucket.terraform_state.bucket
+output "bucket_name" {
+  description = "S3 bucket name"
+  value       = aws_s3_bucket.terraform_state.bucket
 }
 
-output "dynamodb_table_name" {
-  description = "Name for DynamoDB table to store Terraform state locks"
-  value = aws_dynamodb_table.terraform-locks.name
+output "bucket_arn" {
+  description = "S3 bucket ARN"
+  value       = aws_s3_bucket.terraform_state.arn
+}
+
+output "table_name" {
+  description = "DynamoDB table name"
+  value       = aws_dynamodb_table.terraform_locks.name
+}
+
+output "table_arn" {
+  description = "DynamoDB table ARN"
+  value       = aws_dynamodb_table.terraform_locks.arn
 }
