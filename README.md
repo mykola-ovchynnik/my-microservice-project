@@ -1,308 +1,291 @@
-# Lesson 7 - Django Microservice with Kubernetes and Helm
+# DevOps CI/CD
 
-Проєкт демонструє розгортання Django мікросервісу в Kubernetes кластері з використанням Helm чартів та автоматичного масштабування.
+## Вивчення Helm — Lesson 7
 
-## Архітектура проєкту
+## Опис проєкту
 
-### Інфраструктура (Terraform)
-- **EKS кластер** - Kubernetes кластер на AWS
-- **ECR репозиторій** - для зберігання Docker образів
-- **VPC з підмережами** - мережева інфраструктура
-- **S3 Backend** - для зберігання Terraform state
+Проєкт демонструє повний цикл розгортання Django-застосунку у Kubernetes-кластері на базі AWS, із використанням Terraform для керування інфраструктурою та Helm для деплойменту застосунку.
 
-### Додаток (Django + PostgreSQL)
-- **Django застосунок** - веб-додаток з PostgreSQL базою даних
-- **PostgreSQL** - база даних в окремому deployment
-- **Nginx** - веб-сервер (включений в Docker образ)
-- **LoadBalancer** - AWS ELB для публічного доступу
-
-### Автоматизація (Helm + HPA)
-- **Helm чарт** - для розгортання всіх компонентів
-- **HPA (Horizontal Pod Autoscaler)** - автоматичне масштабування 2-6 подів при CPU > 70%
-- **ConfigMap** - для конфігурації середовища
-
-## Компоненти проєкту
-
-### 1. Django Application (`app/django/`)
-- Django веб-додаток з PostgreSQL
-- Docker образ з Nginx та Django
-- Налаштування для Kubernetes через змінні середовища
-
-### 2. Helm Chart (`charts/django-chart/`)
-- **Deployment** - Django та PostgreSQL подів
-- **Service** - LoadBalancer для Django, ClusterIP для PostgreSQL
-- **HPA** - автоматичне масштабування
-- **ConfigMap** - конфігурація середовища
-
-### 3. Terraform Infrastructure (`modules/`)
-- **EKS Module** - Kubernetes кластер
-- **ECR Module** - репозиторій для Docker образів
-- **VPC Module** - мережева інфраструктура
-- **S3 Backend Module** - зберігання state файлів
-
-## Команди для роботи з проєктом
-
-### 1. Підготовка середовища
-```bash
-# Встановлення необхідних інструментів
-# AWS CLI, kubectl, Helm, Docker, Terraform
-
-# Налаштування AWS credentials
-aws configure
-
-# Перевірка підключення до AWS
-aws sts get-caller-identity
-```
-
-### 2. Розгортання інфраструктури (Terraform)
-```bash
-# Ініціалізація Terraform
-terraform init
-
-# Перегляд плану
-terraform plan
-
-# Застосування змін
-terraform apply
-
-# Отримання вихідних даних
-terraform output
-```
-
-### 3. Налаштування kubectl для EKS
-```bash
-# Отримання конфігурації кластера
-aws eks update-kubeconfig --region eu-central-1 --name <cluster-name>
-
-# Перевірка підключення
-kubectl cluster-info
-kubectl get nodes
-```
-
-### 4. Підготовка Docker образу
-```bash
-# Перехід в директорію додатку
-cd app
-
-# Створення .env на основі прикладу
-cp .env.example .env
-# Відредагуйте .env та додайте свої значення (наприклад, пароль та ALLOWED_HOSTS для production)
-
-# Збірка образу з --no-cache
-docker build --no-cache -t django-app ./django
-
-# Тестування локально
-docker run -d --name django-app-test -p 8000:8000 --env-file .env django-app
-```
-
-### 5. Завантаження образу в ECR
-```bash
-# Отримання URL для ECR
-aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.eu-central-1.amazonaws.com
-
-# Тегування образу для ECR
-docker tag django-app:latest <account-id>.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-ecr:latest
-
-# Завантаження в ECR
-docker push <account-id>.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-ecr:latest
-```
-
-### 6. Оновлення Helm values.yaml
-```bash
-# Оновлення репозиторію образу в charts/django-chart/values.yaml
-# Замініть <account-id> на ваш AWS Account ID
-image:
-  repository: <account-id>.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-ecr
-  tag: latest
-```
-
-### 7. Розгортання в Kubernetes (Helm)
-```bash
-# Повернення в кореневу директорію
-cd ..
-
-# Встановлення Helm чарту
-helm install my-app ./charts/django-chart
-
-# Оновлення конфігурації
-helm upgrade my-app ./charts/django-chart
-
-# Перегляд статусу
-kubectl get all
-kubectl get hpa
-```
-
-### 8. Отримання LoadBalancer URL та оновлення ALLOWED_HOSTS
-```bash
-# Отримання ELB URL
-kubectl get svc my-app-django
-
-# Оновлення ALLOWED_HOSTS в values.yaml з отриманим ELB domain
-# Потім оновлення Helm release
-helm upgrade my-app ./charts/django-chart
-```
-
-### 9. Перевірка роботи
-```bash
-# Статус подів
-kubectl get pods
-
-# Перевірка всіх ресурсів
-kubectl get all
-
-# Логи Django
-kubectl logs my-app-django-<pod-name>
-
-# Доступ до додатку
-kubectl get svc my-app-django
-
-# Тестування додатку
-curl http://<elb-domain>
-
-# Перевірка HPA
-kubectl get hpa
-kubectl describe hpa my-app-django-hpa
-
-# Перевірка ConfigMap
-kubectl get configmap my-app-config -o yaml
-```
-
-### 10. Тестування масштабування
-```bash
-# Створення навантаження для тестування HPA
-kubectl run load-generator --image=busybox --rm -it --restart=Never -- sh -c "while true; do wget -qO- http://my-app-django; sleep 0.1; done"
-
-# Моніторинг масштабування
-kubectl get hpa -w
-```
-
-## Конфігурація
-
-### Environment Variables (ConfigMap)
-```yaml
-config:
-  POSTGRES_HOST: my-app-postgres
-  POSTGRES_PORT: "5432"
-  POSTGRES_USER: django_user
-  POSTGRES_DB: django_db
-  POSTGRES_PASSWORD: pass9764gd
-  ALLOWED_HOSTS: "<your-elb-domain>"
-```
-
-### HPA Configuration
-- **Мінімум подів:** 2
-- **Максимум подів:** 6
-- **CPU поріг:** 70%
-- **Тип метрики:** CPU Utilization
-
-### Resource Limits
-```yaml
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-```
+Інфраструктура включає створення EKS-кластеру, приватного репозиторію ECR для зберігання Docker-образів, AWS EBS CSI Driver для persistent storage та розгортання Helm-чарту, що забезпечує масштабування та конфігурацію сервісу.
 
 ## Структура проєкту
 
 ```
 my-microservice-project/
-├── app/
-│   ├── django/                 # Django додаток
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   └── my_app/
-│   ├── nginx/                  # Nginx конфігурація
-│   └── docker-compose.yml
-├── charts/
-│   └── django-chart/           # Helm чарт
+│
+├── main.tf                  # Основний Terraform-файл для підключення модулів
+├── backend.tf               # Конфігурація бекенду (S3 + DynamoDB) для Terraform state
+├── outputs.tf               # Глобальні вихідні дані інфраструктури
+│
+├── modules/                 # Каталог інфраструктурних модулів
+│   ├── s3-backend/          # Модуль для S3 та DynamoDB
+│   │   ├── s3.tf            # Створення S3-бакету
+│   │   ├── dynamodb.tf      # Створення таблиці DynamoDB
+│   │   ├── variables.tf     # Змінні модуля
+│   │   └── outputs.tf       # Вихідні дані
+│   │
+│   ├── vpc/                 # Модуль для створення VPC
+│   │   ├── vpc.tf           # Створення VPC, підмереж та Internet Gateway
+│   │   ├── routes.tf        # Налаштування маршрутів та NAT Gateway
+│   │   ├── variables.tf     # Змінні модуля
+│   │   └── outputs.tf       # Вихідні дані
+│   │
+│   ├── ecr/                 # Модуль для ECR-репозиторію
+│   │   ├── ecr.tf           # Створення приватного ECR з lifecycle policy
+│   │   ├── variables.tf     # Змінні модуля
+│   │   └── outputs.tf       # URL репозиторію
+│   │
+│   └── eks/                 # Модуль для створення EKS-кластеру
+│       ├── eks.tf           # Створення EKS, Node Groups, EBS CSI Driver
+│       ├── variables.tf     # Змінні модуля
+│       └── outputs.tf       # Параметри кластера
+│
+├── app/                     # Django-застосунок
+│   ├── Dockerfile           # Docker-образ для Django
+│   ├── entrypoint.sh        # Скрипт ініціалізації (міграції, collectstatic)
+│   ├── requirements.txt     # Python-залежності (Django, psycopg2, whitenoise)
+│   ├── manage.py            # Django management
+│   └── project/             # Django проєкт
+│       ├── settings.py      # Налаштування (включаючи WhiteNoise)
+│       ├── urls.py          # URL маршрути
+│       ├── static/          # Статичні файли
+│       └── templates/       # HTML шаблони
+│
+├── charts/                  # Helm-чарти
+│   └── django-app/
 │       ├── templates/
-│       │   ├── deployment.yaml
-│       │   ├── service.yaml
-│       │   ├── hpa.yaml
-│       │   ├── configmap.yaml
-│       │   ├── postgres-deployment.yaml
-│       │   └── postgres-service.yaml
-│       ├── Chart.yaml
-│       └── values.yaml
-├── modules/                    # Terraform модулі
-│   ├── eks/
-│   ├── ecr/
-│   ├── vpc/
-│   └── s3-backend/
-├── main.tf
-├── backend.tf
-└── outputs.tf
+│       │   ├── deployment.yaml    # Deployment для Django-застосунку
+│       │   ├── service.yaml       # LoadBalancer Service
+│       │   ├── configmap.yaml     # Змінні середовища
+│       │   ├── hpa.yaml           # Horizontal Pod Autoscaler
+│       │   ├── postgres.yaml      # PostgreSQL Deployment, Service, PVC
+│       │   └── _helpers.tpl       # Допоміжні шаблони Helm
+│       ├── Chart.yaml             # Метадані чарта
+│       └── values.yaml            # Конфігураційні значення
+│
+└── README.md                # Документація
 ```
 
-## Вимоги
+## Створена інфраструктура
 
-### Програмне забезпечення
-- Terraform >= 1.0
-- AWS CLI
-- kubectl
-- Helm >= 3.0
-- Docker
+### AWS-ресурси
 
-### AWS Ресурси
-- EKS кластер (t3.medium nodes, min 2 nodes)
-- ECR репозиторій
-- VPC з підмережами
-- S3 бакет для state
-- DynamoDB таблиця для блокування
+- **EKS-кластер**
+- **EC2 Node Group** (t3.medium, масштабування 2–6 нод)
+- **VPC** з публічними та приватними підмережами
+- **NAT Gateway** в кожній AZ для приватних підмереж
+- **ECR** для зберігання Docker-образів
+- **S3** для Terraform state
+- **DynamoDB** для блокування state
+- **IAM-ролі та політики** для EKS, Node Groups, та EBS CSI Driver
+- **EBS CSI Driver** для динамічного створення Persistent Volumes
+- **OIDC Provider** для EKS Service Accounts
 
-## Безпека
+### Kubernetes-ресурси
 
-- **Шифрування** - всі ресурси мають шифрування
-- **Приватні підмережі** - для баз даних
-- **Security Groups** - налаштовані для EKS
-- **IAM ролі** - мінімальні права доступу
-- **Secrets** - паролі в ConfigMap (для production використовуйте Kubernetes Secrets)
+- **Deployment** для Django-застосунку (2 репліки)
+- **Deployment** для PostgreSQL (1 репліка)
+- **LoadBalancer Service** для зовнішнього доступу до Django
+- **ClusterIP Service** для внутрішнього доступу до PostgreSQL
+- **ConfigMap** зі змінними середовища
+- **PersistentVolumeClaim** (10Gi) для PostgreSQL на AWS EBS
+- **HorizontalPodAutoscaler** для автоматичного масштабування (2-6 подів при CPU > 70%)
+- **StorageClass** (gp2) для EBS volumes
 
-## Моніторинг та масштабування
+## Перед початком роботи
 
-### HPA (Horizontal Pod Autoscaler)
-- Автоматичне масштабування на основі CPU використання
-- Мінімум 2 подів для високої доступності
-- Максимум 6 подів для обмеження ресурсів
+Необхідно встановити та налаштувати:
 
-### LoadBalancer
-- AWS ELB для публічного доступу
-- Автоматичне розподілення навантаження між подами
-- Health checks для перевірки доступності
+- **AWS CLI** (з коректно налаштованими обліковими даними)
+- **Terraform** (версія ≥ 1.0)
+- **kubectl**
+- **Helm 3**
+- **Docker**
 
-## Troubleshooting
+## Інструкція з розгортання
 
-### Проблеми з підключенням до бази даних
+### 1. Підготовка інфраструктури
+
 ```bash
-# Перевірка статусу PostgreSQL
-kubectl get pods -l app=my-app-postgres
+# Ініціалізація Terraform
+terraform init
 
-# Логи PostgreSQL
-kubectl logs my-app-postgres-<pod-name>
+# Перевірка плану змін
+terraform plan
 
-# Перевірка ConfigMap
-kubectl get configmap my-app-config -o yaml
+# Створення інфраструктури
+terraform apply
 ```
 
-### Проблеми з HPA
+**Примітка:** При першому запуску Terraform backend буде локальним. Після створення S3 та DynamoDB, розкоментуйте конфігурацію в `backend.tf` та виконайте `terraform init -migrate-state` для міграції стану в S3.
+
+### 2. Налаштування kubectl
+
 ```bash
+# Підключення до EKS-кластеру
+aws eks update-kubeconfig --region eu-central-1 --name lesson-7-eks-cluster
+
+# Перевірка доступу
+kubectl get nodes
+
+# Перевірка що StorageClass створено автоматично
+kubectl get storageclass
+```
+
+### 3. Підготовка Docker-образу
+
+```bash
+# Перехід в директорію додатку
+cd app
+
+# Збірка образу без кешу
+docker build --no-cache -t lesson-7-django-app .
+
+# Логін у ECR
+aws ecr get-login-password --region eu-central-1 \
+  | docker login --username AWS --password-stdin account_id.dkr.ecr.eu-central-1.amazonaws.com
+
+# Тегування
+docker tag lesson-7-django-app:latest account_id.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-django-app:latest
+
+# Завантаження
+docker push account_id.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-django-app:latest
+
+# Повернення в кореневу директорію
+cd ..
+```
+
+**Примітка:** Замініть `account_id` на ваш AWS Account ID.
+
+### 5. Деплоймент застосунку через Helm
+
+```bash
+# Встановлення Helm-чарта
+helm install django-app ./charts/django-app
+
+# Перевірка статусу
+helm status django-app
+kubectl get all
+```
+
+## Доступ до застосунку
+
+```bash
+# Отримання зовнішнього IP LoadBalancer
+kubectl get service django-app
+
+# Очікування (2–5 хв) на присвоєння IP
+kubectl get service django-app -w
+
+# Тестування
+curl http://EXTERNAL-IP/
+```
+
+**Приклад URL:**
+
+```
+http://a3fad1ef8b2d9431188d8d8361b0d441-1126342473.eu-central-1.elb.amazonaws.com
+```
+
+## Корисні команди
+
+### Управління Helm
+
+```bash
+# Список встановлених релізів
+helm list
+
+# Оновлення конфігурації
+helm upgrade django-app ./charts/django-app
+
+# Видалення релізу
+helm uninstall django-app
+
+# Перегляд значень
+helm get values django-app
+```
+
+### Моніторинг Kubernetes
+
+```bash
+# Статус подів
+kubectl get pods -o wide
+
+# Логи Django
+kubectl logs deployment/django-app
+
+# Логи з real-time
+kubectl logs -f deployment/django-app
+
 # Статус HPA
 kubectl get hpa
+kubectl describe hpa django-app
 
-# Детальна інформація
-kubectl describe hpa my-app-django-hpa
+# Перевірка ConfigMap
+kubectl get configmap
+kubectl describe configmap django-app-config
+
+# Перевірка PVC та PV
+kubectl get pvc
+kubectl get pv
+
+# Детальна інформація про поди
+kubectl describe pod <pod-name>
 ```
 
-### Проблеми з LoadBalancer
+### Робота з подами
+
 ```bash
-# Перевірка сервісів
-kubectl get svc
+# Виконання команди в поді
+kubectl exec deployment/django-app -- sh -c "ls -la /app/staticfiles/"
 
-# Тестування з'єднання
-curl http://<elb-domain>
+# Інтерактивний shell в поді
+kubectl exec -it deployment/django-app -- sh
+
+# Копіювання файлів з поду
+kubectl cp <pod-name>:/app/staticfiles/logo.png ./logo.png
+
+# Перезапуск deployment
+kubectl rollout restart deployment/django-app
+
+# Статус rollout
+kubectl rollout status deployment/django-app
 ```
 
+## Архітектура рішення
+
+### Мережева топологія
+
+- **VPC**: 10.0.0.0/16
+- **Публічні підмережі**: 3 AZ (10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24)
+- **Приватні підмережі**: 3 AZ (10.0.4.0/24, 10.0.5.0/24, 10.0.6.0/24)
+- **NAT Gateway**: По одному в кожній AZ для приватних підмереж
+- **EKS Worker Nodes**: Розташовані в приватних підмережах
+
+### Компоненти застосунку
+
+1. **Django App (2 pods)**
+
+   - Обслуговує HTTP запити
+   - Підключається до PostgreSQL через Service
+   - Статичні файли обслуговуються через WhiteNoise
+   - Init container перевіряє доступність PostgreSQL
+
+2. **PostgreSQL (1 pod)**
+
+   - Використовує Persistent Volume (10Gi EBS)
+   - ClusterIP Service для внутрішнього доступу
+   - Дані зберігаються на `/var/lib/postgresql/data`
+
+3. **LoadBalancer Service**
+
+   - AWS ELB для публічного доступу
+   - Маршрутизація трафіку на порт 8000 Django pods
+   - Health checks на `/health/` endpoint
+
+4. **HPA (Auto-scaling)**
+   - Моніторинг CPU usage
+   - Автоматичне масштабування 2-6 pods
+   - Target: 70% CPU utilization
+
+**Увага:** При виконанні `terraform destroy` будуть видалені всі AWS ресурси, включаючи EKS кластер, VPC, ECR репозиторій, S3 bucket та DynamoDB таблицю.
