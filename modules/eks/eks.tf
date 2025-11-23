@@ -134,7 +134,6 @@ resource "aws_eks_addon" "kube_proxy" {
   addon_name   = "kube-proxy"
 }
 
-# IAM role for EBS CSI driver
 data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -168,7 +167,6 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
   role       = aws_iam_role.ebs_csi_driver.name
 }
 
-# OIDC provider for EKS
 data "tls_certificate" "eks" {
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
 }
@@ -184,7 +182,6 @@ resource "aws_iam_openid_connect_provider" "eks" {
   }
 }
 
-# EBS CSI Driver addon
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name             = aws_eks_cluster.main.name
   addon_name               = "aws-ebs-csi-driver"
