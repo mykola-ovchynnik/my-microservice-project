@@ -1,1 +1,7 @@
 .env
+tfplan
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+kubernetes-secrets.yaml
