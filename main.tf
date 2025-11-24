@@ -84,9 +84,11 @@ module "eks" {
 module "jenkins" {
   source = "./modules/jenkins"
 
-  cluster_name     = module.eks.cluster_name
-  cluster_endpoint = module.eks.cluster_endpoint
-  namespace        = "jenkins"
+  cluster_name            = module.eks.cluster_name
+  cluster_endpoint        = module.eks.cluster_endpoint
+  cluster_oidc_issuer_url = module.eks.cluster_oidc_issuer_url
+  namespace               = "jenkins"
+  ecr_repository_url      = module.ecr.repository_url
 
   providers = {
     helm = helm

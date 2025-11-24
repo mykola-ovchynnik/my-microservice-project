@@ -37,3 +37,13 @@ variable "storage_size" {
   type        = string
   default     = "10Gi"
 }
+
+variable "ecr_repository_url" {
+  description = "ECR repository URL for Docker images"
+  type        = string
+}
+
+variable "cluster_oidc_issuer_url" {
+  description = "EKS cluster OIDC issuer URL"
+  type        = string
+}

@@ -34,3 +34,22 @@ controller:
     - configuration-as-code:latest
     - credentials-binding:latest
     - github:latest
+    - ws-cleanup:latest
+    - kubernetes-credentials-provider:latest
+
+  JCasC:
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "Jenkins configured automatically by JCasC"
+      global-environment: |
+        jenkins:
+          globalNodeProperties:
+            - envVars:
+                env:
+                  - key: ECR_REGISTRY
+                    value: "${ECR_REPOSITORY_URL}"
+                  - key: AWS_ACCOUNT_ID
+                    value: "666834592660"
+                  - key: AWS_DEFAULT_REGION
+                    value: "eu-central-1"
