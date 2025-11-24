@@ -1,291 +1,373 @@
 # DevOps CI/CD
 
-## Вивчення Helm — Lesson 7
+**CI/CD Platform з Jenkins + Argo CD + Terraform**
 
 ## Опис проєкту
 
-Проєкт демонструє повний цикл розгортання Django-застосунку у Kubernetes-кластері на базі AWS, із використанням Terraform для керування інфраструктурою та Helm для деплойменту застосунку.
+Цей проєкт реалізує повний процес CI/CD для Django-застосунку з використанням сучасних DevOps-практик і стеку інструментів:
 
-Інфраструктура включає створення EKS-кластеру, приватного репозиторію ECR для зберігання Docker-образів, AWS EBS CSI Driver для persistent storage та розгортання Helm-чарту, що забезпечує масштабування та конфігурацію сервісу.
+- **Terraform** для управління інфраструктурою (IaC)
+- **Jenkins** для Continuous Integration (збірка та публікація Docker-образів)
+- **Argo CD** для Continuous Deployment (GitOps-підхід)
+- **Kubernetes** (EKS) як платформа оркестрації
+- **Helm** для керування конфігураціями Kubernetes
+
+## Архітектура системи
+
+![Results](./assets/schema.png)
 
 ## Структура проєкту
 
 ```
 my-microservice-project/
 │
-├── main.tf                  # Основний Terraform-файл для підключення модулів
-├── backend.tf               # Конфігурація бекенду (S3 + DynamoDB) для Terraform state
-├── outputs.tf               # Глобальні вихідні дані інфраструктури
+├── main.tf                  # Головний файл для підключення модулів
+├── backend.tf               # Налаштування бекенду для стейтів
+├── outputs.tf               # Загальні виводи ресурсів
+├── kubernetes-secrets.yaml  # Секрети для Jenkins (AWS credentials)
 │
-├── modules/                 # Каталог інфраструктурних модулів
+├── modules/                 # Каталог з усіма модулями
 │   ├── s3-backend/          # Модуль для S3 та DynamoDB
-│   │   ├── s3.tf            # Створення S3-бакету
-│   │   ├── dynamodb.tf      # Створення таблиці DynamoDB
-│   │   ├── variables.tf     # Змінні модуля
-│   │   └── outputs.tf       # Вихідні дані
+│   │   ├── s3.tf
+│   │   ├── dynamodb.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
 │   │
-│   ├── vpc/                 # Модуль для створення VPC
-│   │   ├── vpc.tf           # Створення VPC, підмереж та Internet Gateway
-│   │   ├── routes.tf        # Налаштування маршрутів та NAT Gateway
-│   │   ├── variables.tf     # Змінні модуля
-│   │   └── outputs.tf       # Вихідні дані
+│   ├── vpc/                 # Модуль для VPC
+│   │   ├── vpc.tf
+│   │   ├── routes.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
 │   │
-│   ├── ecr/                 # Модуль для ECR-репозиторію
-│   │   ├── ecr.tf           # Створення приватного ECR з lifecycle policy
-│   │   ├── variables.tf     # Змінні модуля
-│   │   └── outputs.tf       # URL репозиторію
+│   ├── ecr/                 # Модуль для ECR
+│   │   ├── ecr.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
 │   │
-│   └── eks/                 # Модуль для створення EKS-кластеру
-│       ├── eks.tf           # Створення EKS, Node Groups, EBS CSI Driver
-│       ├── variables.tf     # Змінні модуля
-│       └── outputs.tf       # Параметри кластера
+│   ├── eks/                 # Модуль для Kubernetes кластера
+│   │   ├── eks.tf
+│   │   ├── aws_ebs_csi_driver.tf
+│   │   ├── storage_class.tf
+│   │   ├── variables.tf
+│   │   ├── providers.tf
+│   │   └── outputs.tf
+│   │
+│   ├── jenkins/             # Модуль для Jenkins
+│   │   ├── jenkins.tf
+│   │   ├── irsa.tf
+│   │   ├── rbac-secrets.tf
+│   │   ├── providers.tf
+│   │   ├── variables.tf
+│   │   ├── values.yaml
+│   │   └── outputs.tf
+│   │
+│   └── argo_cd/             # Модуль для Argo CD
+│       ├── argo_cd.tf
+│       ├── providers.tf
+│       ├── variables.tf
+│       ├── values.yaml
+│       ├── outputs.tf
+│       └── charts/          # Helm chart для Argo CD Applications
+│           ├── Chart.yaml
+│           ├── values.yaml
+│           └── templates/
+│               ├── application.yaml
+│               └── repository.yaml
 │
-├── app/                     # Django-застосунок
-│   ├── Dockerfile           # Docker-образ для Django
-│   ├── entrypoint.sh        # Скрипт ініціалізації (міграції, collectstatic)
-│   ├── requirements.txt     # Python-залежності (Django, psycopg2, whitenoise)
-│   ├── manage.py            # Django management
-│   └── project/             # Django проєкт
-│       ├── settings.py      # Налаштування (включаючи WhiteNoise)
-│       ├── urls.py          # URL маршрути
-│       ├── static/          # Статичні файли
-│       └── templates/       # HTML шаблони
-│
-├── charts/                  # Helm-чарти
+├── charts/                  # Django Helm Chart
 │   └── django-app/
-│       ├── templates/
-│       │   ├── deployment.yaml    # Deployment для Django-застосунку
-│       │   ├── service.yaml       # LoadBalancer Service
-│       │   ├── configmap.yaml     # Змінні середовища
-│       │   ├── hpa.yaml           # Horizontal Pod Autoscaler
-│       │   ├── postgres.yaml      # PostgreSQL Deployment, Service, PVC
-│       │   └── _helpers.tpl       # Допоміжні шаблони Helm
-│       ├── Chart.yaml             # Метадані чарта
-│       └── values.yaml            # Конфігураційні значення
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           ├── configmap.yaml
+│           ├── postgres.yaml
+│           ├── hpa.yaml
+│           └── _helpers.tpl
 │
-└── README.md                # Документація
+└── README.md               # Документація проєкту
 ```
 
-## Створена інфраструктура
+## Створювана інфраструктура
 
-### AWS-ресурси
+**AWS Ресурси**
 
-- **EKS-кластер**
-- **EC2 Node Group** (t3.medium, масштабування 2–6 нод)
-- **VPC** з публічними та приватними підмережами
-- **NAT Gateway** в кожній AZ для приватних підмереж
-- **ECR** для зберігання Docker-образів
-- **S3** для Terraform state
-- **DynamoDB** для блокування state
-- **IAM-ролі та політики** для EKS, Node Groups, та EBS CSI Driver
-- **EBS CSI Driver** для динамічного створення Persistent Volumes
-- **OIDC Provider** для EKS Service Accounts
+- **_EKS Cluster_** з версією Kubernetes 1.32
+- **_EC2 Node Group_** з інстансами t3.medium (2–6 нод)
+- **_VPC_** з публічними та приватними підмережами
+- **_ECR Repository_** для зберігання Docker-образів
+- **_S3 Bucket_** для Terraform state
+- **_DynamoDB Table_** для state locking
+- **_IAM Roles_** та політики доступу для всіх сервісів
+- **_EBS CSI Driver_** для persistent volumes
 
-### Kubernetes-ресурси
+**Kubernetes Ресурси**
 
-- **Deployment** для Django-застосунку (2 репліки)
-- **Deployment** для PostgreSQL (1 репліка)
-- **LoadBalancer Service** для зовнішнього доступу до Django
-- **ClusterIP Service** для внутрішнього доступу до PostgreSQL
-- **ConfigMap** зі змінними середовища
-- **PersistentVolumeClaim** (10Gi) для PostgreSQL на AWS EBS
-- **HorizontalPodAutoscaler** для автоматичного масштабування (2-6 подів при CPU > 70%)
-- **StorageClass** (gp2) для EBS volumes
+- **_Jenkins з Kaniko_** для збірки Docker-образів
+- **_Argo CD_** для GitOps-деплойменту
+- **_Django Application_** з автоматичним масштабуванням (HPA)
+- **_PostgreSQL Database_** для Django-застосунку
+- **_LoadBalancer Services_** для зовнішнього доступу
+- **_Persistent Volumes_** для даних Jenkins
 
-## Перед початком роботи
+## Передумови
 
-Необхідно встановити та налаштувати:
+- Встановлені інструменти:
 
-- **AWS CLI** (з коректно налаштованими обліковими даними)
-- **Terraform** (версія ≥ 1.0)
-- **kubectl**
-- **Helm 3**
-- **Docker**
+1. AWS CLI з налаштованими credentials
+2. Terraform (версія >= 1.0)
+3. kubectl для роботи з Kubernetes
+4. Helm 3 для розгортання charts
+5. Git для роботи з репозиторіями
 
-## Інструкція з розгортання
+- AWS Permissions:
 
-### 1. Підготовка інфраструктури
+Повні права для EKS, EC2, IAM, S3, DynamoDB, ECR
+
+## Покрокове розгортання
+
+**Крок 1: Підготовка AWS Credentials**
+
+```bash
+# Налаштуйте AWS CLI
+aws configure
+
+# Отримайте ваш AWS Account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "AWS Account ID: $AWS_ACCOUNT_ID"
+```
+
+**Крок 2: Підготовка секретів**
+
+```bash
+# Кодування AWS credentials в base64
+echo -n "YOUR_AWS_ACCESS_KEY_ID" | base64
+echo -n "YOUR_AWS_SECRET_ACCESS_KEY" | base64
+
+# Створіть GitHub Personal Access Token і закодуйте
+echo -n "YOUR_GITHUB_TOKEN" | base64
+```
+
+- Оновіть файл `kubernetes-secrets.yaml` вашими закодованими значеннями:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-credentials
+  namespace: jenkins
+type: Opaque
+data:
+  aws-access-key-id: <BASE64_ENCODED_ACCESS_KEY>
+  aws-secret-access-key: <BASE64_ENCODED_SECRET_KEY>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-token
+  namespace: jenkins
+type: Opaque
+data:
+  token: <BASE64_ENCODED_GITHUB_TOKEN>
+```
+
+**Крок 3: Розгортання інфраструктури**
 
 ```bash
 # Ініціалізація Terraform
 terraform init
 
-# Перевірка плану змін
+# Перегляд планованих змін
 terraform plan
 
-# Створення інфраструктури
+# Розгортання інфраструктури (15–20 хвилин)
 terraform apply
 ```
 
-**Примітка:** При першому запуску Terraform backend буде локальним. Після створення S3 та DynamoDB, розкоментуйте конфігурацію в `backend.tf` та виконайте `terraform init -migrate-state` для міграції стану в S3.
-
-### 2. Налаштування kubectl
+**Крок 4: Налаштування kubectl**
 
 ```bash
-# Підключення до EKS-кластеру
-aws eks update-kubeconfig --region eu-central-1 --name lesson-7-eks-cluster
+# Налаштування доступу до EKS кластера
+aws eks update-kubeconfig --region eu-central-1 --name lesson-9-eks-cluster
 
-# Перевірка доступу
+# Перевірка підключення
 kubectl get nodes
-
-# Перевірка що StorageClass створено автоматично
-kubectl get storageclass
+kubectl get namespaces
 ```
 
-### 3. Підготовка Docker-образу
+**Крок 5: Застосування секретів**
 
 ```bash
-# Перехід в директорію додатку
-cd app
+# Застосування AWS credentials та GitHub token
+kubectl apply -f kubernetes-secrets.yaml
 
-# Збірка образу без кешу
-docker build --no-cache -t lesson-7-django-app .
-
-# Логін у ECR
-aws ecr get-login-password --region eu-central-1 \
-  | docker login --username AWS --password-stdin account_id.dkr.ecr.eu-central-1.amazonaws.com
-
-# Тегування
-docker tag lesson-7-django-app:latest account_id.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-django-app:latest
-
-# Завантаження
-docker push account_id.dkr.ecr.eu-central-1.amazonaws.com/lesson-7-django-app:latest
-
-# Повернення в кореневу директорію
-cd ..
+# Перевірка створення секретів
+kubectl get secrets -n jenkins
 ```
 
-**Примітка:** Замініть `account_id` на ваш AWS Account ID.
-
-### 5. Деплоймент застосунку через Helm
+**Крок 6: Доступ до сервісів**
 
 ```bash
-# Встановлення Helm-чарта
-helm install django-app ./charts/django-app
+# Отримання URLs та паролів
+terraform output deployment_instructions
 
-# Перевірка статусу
-helm status django-app
-kubectl get all
+# Отримання паролів окремо
+terraform output jenkins_admin_password
+terraform output argocd_admin_password
 ```
 
-## Доступ до застосунку
+## Налаштування CI/CD Pipeline
+
+### 1. Налаштування Jenkins
+
+**Доступ до Jenkins UI:**
 
 ```bash
-# Отримання зовнішнього IP LoadBalancer
-kubectl get service django-app
-
-# Очікування (2–5 хв) на присвоєння IP
-kubectl get service django-app -w
-
-# Тестування
-curl http://EXTERNAL-IP/
+# Отримати URL Jenkins
+terraform output jenkins_url
 ```
 
-**Приклад URL:**
+**Логін в Jenkins:**
 
-```
-http://a3fad1ef8b2d9431188d8d8361b0d441-1126342473.eu-central-1.elb.amazonaws.com
-```
+- Username: admin
+- Password: `terraform output jenkins_admin_password`
 
-## Корисні команди
+**Створення Pipeline Job:**
 
-### Управління Helm
+- New Item → Pipeline
+- Pipeline script from SCM
+- Git Repository: https://github.com/YOUR_USERNAME/YOUR_REPO.git
+- Branch: lesson-8-9
+- Script Path: Jenkinsfile
+
+**Налаштування Credentials:**
+
+- Manage Jenkins → Credentials
+- Додайте GitHub token з ID: github-token
+
+### 2. Налаштування Argo CD
+
+**Доступ до Argo CD UI:**
 
 ```bash
-# Список встановлених релізів
-helm list
-
-# Оновлення конфігурації
-helm upgrade django-app ./charts/django-app
-
-# Видалення релізу
-helm uninstall django-app
-
-# Перегляд значень
-helm get values django-app
+# Отримати URL Argo CD
+terraform output argocd_server_url
 ```
 
-### Моніторинг Kubernetes
+**Логін в Argo CD:**
+
+- Username: admin
+- Password: `terraform output argocd_admin_password`
+
+**Перевірка Applications:**
+
+- Argo CD автоматично створить Application для Django
+- Перевірте статус синхронізації
+
+## Процес CI/CD
+
+**Continuous Integration (Jenkins)**
+
+- Тригер: Push у гілку lesson-8-9
+- Збірка: Kaniko збирає Docker-образ з Django-кодом
+- Публікація: Образ публікується в ECR з тегом build number
+- Оновлення: Jenkins оновлює values.yaml у гілці infra-repo
+- Commit: Зміни комітяться назад у Git-репозиторій
+
+**Continuous Deployment (Argo CD)**
+
+- Моніторинг: Argo CD відстежує зміни в гілці infra-repo
+- Синхронізація: Автоматично застосовує зміни в Kubernetes
+- Деплой: Новий Docker-образ розгортається в кластері
+- Масштабування: HPA автоматично масштабує поди за навантаженням
+
+## Моніторинг та логування
+
+**Перевірка статусу**
 
 ```bash
-# Статус подів
-kubectl get pods -o wide
+# Jenkins pods
+kubectl get pods -n jenkins
 
-# Логи Django
-kubectl logs deployment/django-app
+# Argo CD pods
+kubectl get pods -n argocd
 
-# Логи з real-time
-kubectl logs -f deployment/django-app
+# Django application
+kubectl get pods -n django-app
 
-# Статус HPA
-kubectl get hpa
-kubectl describe hpa django-app
-
-# Перевірка ConfigMap
-kubectl get configmap
-kubectl describe configmap django-app-config
-
-# Перевірка PVC та PV
-kubectl get pvc
-kubectl get pv
-
-# Детальна інформація про поди
-kubectl describe pod <pod-name>
+# Services та їх external IPs
+kubectl get services --all-namespaces
 ```
 
-### Робота з подами
+**Логи**
 
 ```bash
-# Виконання команди в поді
-kubectl exec deployment/django-app -- sh -c "ls -la /app/staticfiles/"
+# Jenkins logs
+kubectl logs -f deployment/jenkins -n jenkins
 
-# Інтерактивний shell в поді
-kubectl exec -it deployment/django-app -- sh
+# Argo CD logs
+kubectl logs -f deployment/argocd-server -n argocd
 
-# Копіювання файлів з поду
-kubectl cp <pod-name>:/app/staticfiles/logo.png ./logo.png
-
-# Перезапуск deployment
-kubectl rollout restart deployment/django-app
-
-# Статус rollout
-kubectl rollout status deployment/django-app
+# Django application logs
+kubectl logs -f deployment/django-app -n django-app
 ```
 
-## Архітектура рішення
+**Метрики**
 
-### Мережева топологія
+```bash
+# Node metrics
+kubectl top nodes
 
-- **VPC**: 10.0.0.0/16
-- **Публічні підмережі**: 3 AZ (10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24)
-- **Приватні підмережі**: 3 AZ (10.0.4.0/24, 10.0.5.0/24, 10.0.6.0/24)
-- **NAT Gateway**: По одному в кожній AZ для приватних підмереж
-- **EKS Worker Nodes**: Розташовані в приватних підмережах
+# Pod metrics
+kubectl top pods --all-namespaces
 
-### Компоненти застосунку
+# HPA status
+kubectl get hpa -n django-app
+```
 
-1. **Django App (2 pods)**
+## Автоматичне масштабування
 
-   - Обслуговує HTTP запити
-   - Підключається до PostgreSQL через Service
-   - Статичні файли обслуговуються через WhiteNoise
-   - Init container перевіряє доступність PostgreSQL
+Django-застосунок налаштований з HorizontalPodAutoscaler:
 
-2. **PostgreSQL (1 pod)**
+- Мінімум подів: 2
+- Максимум подів: 6
+- Поріг CPU: 70%
+- Метрики: CPU utilization
 
-   - Використовує Persistent Volume (10Gi EBS)
-   - ClusterIP Service для внутрішнього доступу
-   - Дані зберігаються на `/var/lib/postgresql/data`
+```bash
+# Моніторинг автомасштабування
+kubectl describe hpa django-app -n django-app
+watch kubectl get hpa -n django-app
+```
 
-3. **LoadBalancer Service**
+## Безпека
 
-   - AWS ELB для публічного доступу
-   - Маршрутизація трафіку на порт 8000 Django pods
-   - Health checks на `/health/` endpoint
+**Реалізовані заходи:**
 
-4. **HPA (Auto-scaling)**
-   - Моніторинг CPU usage
-   - Автоматичне масштабування 2-6 pods
-   - Target: 70% CPU utilization
+- RBAC: роль-базований контроль доступу для сервісів
+- Service Accounts: окремі облікові записи для Jenkins та Argo CD
+- Secrets Management: AWS credentials та GitHub tokens у Kubernetes Secrets
+- Network Policies: ізоляція мережевого трафіку
+- Image Scanning: ECR автоматично сканує образи на вразливості
 
-**Увага:** При виконанні `terraform destroy` будуть видалені всі AWS ресурси, включаючи EKS кластер, VPC, ECR репозиторій, S3 bucket та DynamoDB таблицю.
+**Рекомендації для production:**
+
+- Використовуйте AWS Secrets Manager або Vault замість Kubernetes Secrets
+- Увімкніть Pod Security Standards
+- Налаштуйте строгі Network Policies
+- Використовуйте private ECR endpoints
+
+## Очищення ресурсів
+
+Для видалення всієї інфраструктури:
+
+```bash
+# Видалення всіх ресурсів AWS
+terraform destroy
+
+# Підтвердіть видалення
+# Введіть "yes" коли буде запит
+```
+
+**Примітка:** Переконайтеся, що всі дані збережені перед видаленням інфраструктури.
