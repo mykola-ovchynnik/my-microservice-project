@@ -199,3 +199,4 @@ cython_debug/
 *.tfstate.backup
 .idea/
 .vscode/
+kubernetes-secrets.yaml
