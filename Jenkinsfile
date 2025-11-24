@@ -83,10 +83,6 @@ spec:
                                 git config --global user.name "Jenkins CI"
                                 git config --global user.email "jenkins@ci.com"
                                 
-                                # Configure git credential helper to use the token
-                                git config --global credential.helper store
-                                echo "https://\${GITHUB_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-                                
                                 # Clone the infrastructure repository
                                 git clone ${GIT_REPO} infra-repo
                                 cd infra-repo
@@ -99,13 +95,11 @@ spec:
                                 echo "Updated values.yaml:"
                                 grep -A 5 -B 5 'tag:' charts/django-app/values.yaml
                                 
-                                # Commit and push changes
+                                # Commit and push changes using token in URL
                                 git add charts/django-app/values.yaml
                                 git commit -m "Update Django image tag to ${IMAGE_TAG} [skip ci]"
+                                git remote set-url origin https://\${GITHUB_TOKEN}@github.com/mykola-ovchynnik/my-microservice-project.git
                                 git push origin ${GIT_BRANCH}
-                                
-                                # Clean up credentials
-                                rm -f ~/.git-credentials
                             """
                         }
                     }
