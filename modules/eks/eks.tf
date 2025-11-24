@@ -16,7 +16,7 @@ resource "aws_iam_role" "eks_cluster_role" {
 
   tags = {
     Name        = "${var.cluster_name}-cluster-role"
-    Environment = "lesson-7"
+    Environment = "lesson-8"
   }
 }
 
@@ -25,6 +25,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
+# EKS Cluster
 resource "aws_eks_cluster" "main" {
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster_role.arn
@@ -45,10 +46,11 @@ resource "aws_eks_cluster" "main" {
 
   tags = {
     Name        = var.cluster_name
-    Environment = "lesson-7"
+    Environment = "lesson-8"
   }
 }
 
+# EKS Node Group IAM Role
 resource "aws_iam_role" "eks_node_group_role" {
   name = "${var.cluster_name}-node-group-role"
 
@@ -67,7 +69,7 @@ resource "aws_iam_role" "eks_node_group_role" {
 
   tags = {
     Name        = "${var.cluster_name}-node-group-role"
-    Environment = "lesson-7"
+    Environment = "lesson-8"
   }
 }
 
@@ -86,6 +88,7 @@ resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
   role       = aws_iam_role.eks_node_group_role.name
 }
 
+# EKS Node Group
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = var.node_group_name
@@ -113,7 +116,7 @@ resource "aws_eks_node_group" "main" {
 
   tags = {
     Name        = var.node_group_name
-    Environment = "lesson-7"
+    Environment = "lesson-8"
   }
 }
 
@@ -134,90 +137,12 @@ resource "aws_eks_addon" "kube_proxy" {
   addon_name   = "kube-proxy"
 }
 
-data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    effect  = "Allow"
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
-    }
-
-    principals {
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
-      type        = "Federated"
-    }
-  }
-}
-
-resource "aws_iam_role" "ebs_csi_driver" {
-  name               = "${var.cluster_name}-ebs-csi-driver"
-  assume_role_policy = data.aws_iam_policy_document.ebs_csi_driver_assume_role.json
-
-  tags = {
-    Name        = "${var.cluster_name}-ebs-csi-driver"
-    Environment = "lesson-7"
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
+resource "aws_iam_role_policy_attachment" "node_group_ebs_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-  role       = aws_iam_role.ebs_csi_driver.name
+  role       = aws_iam_role.eks_node_group_role.name
 }
 
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
-
-  tags = {
-    Name        = "${var.cluster_name}-oidc"
-    Environment = "lesson-7"
-  }
-}
-
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = aws_eks_cluster.main.name
-  addon_name               = "aws-ebs-csi-driver"
-  service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
-
-  depends_on = [aws_eks_node_group.main]
-}
-
-# Kubernetes provider for creating StorageClass
-data "aws_eks_cluster_auth" "main" {
-  name = aws_eks_cluster.main.name
-}
-
-provider "kubernetes" {
-  host                   = aws_eks_cluster.main.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.main.token
-}
-
-resource "kubernetes_storage_class_v1" "gp2" {
-  metadata {
-    name = "gp2"
-    annotations = {
-      "storageclass.kubernetes.io/is-default-class" = "true"
-    }
-  }
-
-  storage_provisioner    = "ebs.csi.aws.com"
-  reclaim_policy         = "Delete"
-  volume_binding_mode    = "WaitForFirstConsumer"
-  allow_volume_expansion = true
-
-  parameters = {
-    type   = "gp2"
-    fsType = "ext4"
-  }
-
-  depends_on = [aws_eks_addon.ebs_csi_driver]
+resource "aws_iam_role_policy_attachment" "node_group_ec2_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+  role       = aws_iam_role.eks_node_group_role.name
 }
