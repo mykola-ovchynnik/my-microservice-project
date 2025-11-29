@@ -31,16 +31,12 @@ config:
   SECRET_KEY: "django-insecure-u(qc9*j0w=ut5db3f#izfz_8szd7rruds!p8p5hgwz0in=+s7t"
   DEBUG: "False"
   ALLOWED_HOSTS: "*"
-  POSTGRES_DB: "project"
-  POSTGRES_USER: "myuser"
-  POSTGRES_PASSWORD: "mypassword"
-  POSTGRES_HOST: "postgres"
+  # Database configuration - these will be overridden by Terraform outputs
+  POSTGRES_DB: "djangodb"
+  POSTGRES_USER: "djangouser"
+  POSTGRES_PASSWORD: "changeme"  # Should be set via helm upgrade --set
+  POSTGRES_HOST: "rds-endpoint.region.rds.amazonaws.com"  # Should be set via helm upgrade --set
   POSTGRES_PORT: "5432"
-
-postgres:
-  enabled: true
-  storage: 10Gi
-  storageClassName: gp2
 
 nodeSelector: {}
 tolerations: []

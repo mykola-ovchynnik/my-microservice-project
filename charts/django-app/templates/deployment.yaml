@@ -17,17 +17,17 @@ spec:
         {{- include "django-app.selectorLabels" . | nindent 8 }}
     spec:
       initContainers:
-        - name: wait-for-postgres
-          image: postgres:13
+        - name: wait-for-rds
+          image: postgres:16
           command:
             - sh
             - -c
             - |
               until pg_isready -h {{ .Values.config.POSTGRES_HOST }} -p {{ .Values.config.POSTGRES_PORT }} -U {{ .Values.config.POSTGRES_USER }}; do
-                echo "Waiting for postgres..."
+                echo "Waiting for RDS PostgreSQL..."
                 sleep 2
               done
-              echo "PostgreSQL is ready!"
+              echo "RDS PostgreSQL is ready!"
           env:
             - name: PGPASSWORD
               value: {{ .Values.config.POSTGRES_PASSWORD | quote }}
