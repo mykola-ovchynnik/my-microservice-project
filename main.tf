@@ -13,6 +13,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.1"
+    }
   }
 }
 
@@ -79,6 +83,52 @@ module "eks" {
   node_group_min_size     = 2
   node_group_max_size     = 6
   node_group_desired_size = 2
+}
+
+module "rds_postgres" {
+  source = "./modules/rds"
+
+  project_name = "lesson-10"
+  environment  = "dev"
+
+  use_aurora     = false
+  engine         = "postgres"
+  engine_version = "16.9"
+  instance_class = "db.t3.micro"
+
+  db_name         = "djangodb"
+  master_username = "djangouser"
+  master_password = null
+
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnet_ids
+
+  allowed_cidr_blocks = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
+
+  multi_az                = false
+  storage_encrypted       = true
+  backup_retention_period = 3
+  deletion_protection     = false
+  skip_final_snapshot     = true
+
+  custom_db_parameters = [
+    {
+      name  = "max_connections"
+      value = "200"
+    },
+    {
+      name  = "checkpoint_completion_target"
+      value = "0.9"
+    }
+  ]
+
+  tags = {
+    Project     = "lesson-10"
+    Environment = "dev"
+    ManagedBy   = "terraform"
+    Module      = "rds"
+    Purpose     = "django-database"
+  }
 }
 
 module "jenkins" {
