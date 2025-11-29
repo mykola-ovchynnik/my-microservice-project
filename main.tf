@@ -85,6 +85,37 @@ module "eks" {
   node_group_desired_size = 2
 }
 
+resource "aws_security_group" "eks_to_rds" {
+  name        = "lesson-10-eks-to-rds"
+  description = "Allow EKS nodes to access RDS databases"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "lesson-10-eks-to-rds"
+    Project     = "lesson-10"
+    Environment = "dev"
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_security_group_rule" "eks_nodes_to_rds" {
+  count                    = 1
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.eks_to_rds.id
+  security_group_id        = aws_security_group.eks_to_rds.id
+  description              = "Allow EKS nodes to access PostgreSQL"
+}
+
 module "rds_postgres" {
   source = "./modules/rds"
 
